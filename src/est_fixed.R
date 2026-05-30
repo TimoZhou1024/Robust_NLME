@@ -48,7 +48,7 @@ est_fixed <- function(RespLog, long.data, Jfixed,
   k <-  length(Jfixed)
   
   gr.mu <- map(RespLog$mu.loglike, function(t){
-    Deriv(t, Jfixed)
+    get_Deriv_cached(t, Jfixed)
   })
   
   gr <- function(xx){

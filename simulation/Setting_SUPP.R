@@ -8,24 +8,30 @@
 ## 4. add prediction (Bias, MSE, coverage) **please ignore**
 ########################### load packages
 library(nlme)
-library(tidyverse)
+library(dplyr)
 library(Deriv)
 library(stringr)
 library(LaplacesDemon)
+library(mvtnorm)
 library(purrr)
 library(MASS)
+library(Matrix)
 library(xtable)
-library(dplyr)
+library(R.utils)
 
 rm(list=ls())
-########################## source all functions  
-(file.sources = list.files(path=here::here("src"),pattern="*.R$"))
-(file.sources <- paste0(here::here("src"), "/", file.sources))
-sapply(file.sources,source)
+########################## source all functions
+file.sources <- list.files(path=here::here("src"), pattern="*.R$", full.names=TRUE)
+file.sources <- file.sources[basename(file.sources)!="00_dependencies.R"]
+sapply(file.sources, source)
 ######################### Simulation setting
-set.seed(1)
-rep <- 200
-k.runs <- 100  # number of bootstrap runs
+set.seed(as.integer(Sys.getenv("SIM_SEED", "1")))
+rep <- as.integer(Sys.getenv("SIM_REP", "200"))
+k.runs <- as.integer(Sys.getenv("SIM_K_RUNS", "100")) # number of bootstrap runs
+skip.bootstrap <- tolower(Sys.getenv("SIM_SKIP_BOOTSTRAP", "false")) %in% c("1", "true", "yes", "y")
+max.attempts <- as.integer(Sys.getenv("SIM_MAX_ATTEMPTS", "100"))
+output.dir <- Sys.getenv("SIM_OUTPUT_DIR", here::here())
+dir.create(output.dir, recursive=TRUE, showWarnings=FALSE)
 n <- 100
 ni_train <- 15 # number of training points
 test_points <- c(16, 18, 20)
@@ -83,11 +89,16 @@ for(k in 1:rep){
   nlme.fit <- cd4.fit <- OS <- TS <- JM <- 0
   class(nlme.fit) <- class(cd4.fit) <- class(OS) <-  class(TS) <- class(JM)<- "try-error"
   OSconvg <- TSconvg <- JMconvg <-  FALSE
+  attempt <- 0
   
   while(class(nlme.fit)[1]=="try-error"|
         class(cd4.fit)=="try-error" | 
         class(OS)=="try-error" | class(JM)=="try-error" | class(TS)=="try-error" |
         OSconvg==FALSE | TSconvg==FALSE| JMconvg==FALSE){
+    attempt <- attempt + 1
+    if(attempt > max.attempts){
+      stop("Exceeded SIM_MAX_ATTEMPTS while trying to obtain converged NLME, OS, TS, and JM fits.")
+    }
   
     ##########################  simulate data set
     cat("--Simulating data\n")
@@ -442,15 +453,30 @@ for(k in 1:rep){
     }
   }
   ############### Bootstrapping SE #####################
-  cat("--Runing Bootstrapping SE for Joint model\n\n")
-  JM.SD.BT <- get_sd_bootstrap_with_pred(Rnlme.fit=JM, simdat_train, simdat_test, a0_dist=sigma2$ran.dist, a0_df=sigma2$df,
-                                at.rep=k ,k.runs=k.runs, independent.raneff = "byModel")
-  cat("--done\n")
+  if(skip.bootstrap){
+    cat("--Skipping Bootstrapping SE for Joint model\n\n")
+    JM.SD.BT <- list(se.bt=rep(NA_real_, length(true.fixed)),
+                     se.bt1=rep(NA_real_, length(true.fixed)),
+                     se.bt2=rep(NA_real_, length(true.fixed)),
+                     runs.bt1=NA_integer_,
+                     runs.bt2=NA_integer_)
+    simdat_test <- map(simdat_test, function(t){
+      t$cover.JM.bt <- NA_real_
+      t$bias.JM.bt <- NA_real_
+      t$mse.JM.bt <- NA_real_
+      t
+    })
+  } else {
+    cat("--Runing Bootstrapping SE for Joint model\n\n")
+    JM.SD.BT <- get_sd_bootstrap_with_pred(Rnlme.fit=JM, simdat_train, simdat_test, a0_dist=sigma2$ran.dist, a0_df=sigma2$df,
+                                  at.rep=k ,k.runs=k.runs, independent.raneff = "byModel")
+    cat("--done\n")
+    simdat_test <- JM.SD.BT$simdat_test
+  }
   
   runs.bt1 <- c(runs.bt1, JM.SD.BT$runs.bt1)
   runs.bt2 <- c(runs.bt2, JM.SD.BT$runs.bt2)
   
-  simdat_test <- JM.SD.BT$simdat_test
   ############### store output
   #### nlme
   est.NLME <- rbind(est.NLME, fixef(nlme.fit))
@@ -525,7 +551,7 @@ JM.out <- list(True=true.fixed,Est=est.JM, SD=sd.JM, SD.BT=sd.bt.JM,
 
 
 saveRDS(list(NLME.out=NLME.out,OS.out=OS.out, TS.out=TS.out,JM.out=JM.out, alpha.NLME=alpha.NLME), 
-        here::here("s5.rds"))
+        file.path(output.dir, "s5.rds"))
 
 #save.image(here::here("s5.RData"))
 

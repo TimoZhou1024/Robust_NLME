@@ -66,9 +66,9 @@ est_disp_ml <- function(RespLog, long.data, Jdisp,Jfixed, Jraneff,
   k <- length(Jdisp_new)
 
   gr.mu <- map(RespLog$mu.loglike, function(t){
-     Deriv(t, Jdisp)
+     get_Deriv_cached(t, Jdisp)
   })
-  gr.ran <- Deriv(ran.loglike, Jdisp_new)
+  gr.ran <- get_Deriv_cached(ran.loglike, Jdisp_new)
   
   ############ gradient function
   

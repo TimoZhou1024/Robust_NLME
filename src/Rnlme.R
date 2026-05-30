@@ -60,32 +60,38 @@ Rnlme <- function(nlmeObjects, long.data, idVar,
     
     # estimate random effects
     cat("Start estimating random effects ...\n")
-    ran.output <- est_raneff(RespLog=Jloglike, long.data, idVar, Jraneff, 
-                             fixedest0, dispest0, invSIGMA0,
-                             uniqueID, n,ni,q, N, q_split,df.sigma, df.randisp,
-                             Verbose=Verbose, scale=TRUE)
+    ran.time <- system.time({
+      ran.output <- est_raneff(RespLog=Jloglike, long.data, idVar, Jraneff, 
+                               fixedest0, dispest0, invSIGMA0,
+                               uniqueID, n,ni,q, N, q_split,df.sigma, df.randisp,
+                               Verbose=Verbose, scale=TRUE)
+    })
     Bi <- ran.output$Bi
     B <- ran.output$B
-    cat("done.\n")
+    cat("done. elapsed=", round(ran.time[["elapsed"]], 2), "s\n")
     
     # estimate fixed parameters
     cat("Start estimating fixed parameters ... \n")
-    fixed.output <- est_fixed(RespLog=Jloglike, long.data,Jfixed,
-                              fixedest0, dispest0, invSIGMA0,
-                              Bi, B, 
-                              lower=lower.fixed, upper=upper.fixed,
-                              Verbose=Verbose)
+    fixed.time <- system.time({
+      fixed.output <- est_fixed(RespLog=Jloglike, long.data,Jfixed,
+                                fixedest0, dispest0, invSIGMA0,
+                                Bi, B, 
+                                lower=lower.fixed, upper=upper.fixed,
+                                Verbose=Verbose)
+    })
     
     fixedest <- fixed.output$beta
-    cat("done.\n")
+    cat("done. elapsed=", round(fixed.time[["elapsed"]], 2), "s\n")
     
     # estimate dispersion parameters
     cat("Start estimating dispersion parameters ... \n")
-    disp.output <- est_disp_ml(RespLog=Jloglike, long.data, Jdisp, Jfixed, Jraneff,
-                                  fixedest, dispest0, invSIGMA0, Lval0,
-                                  Bi, B,
-                                  lower=lower.disp, upper=upper.disp,
-                                  independent=independent.raneff,block=SIGMA.block, Verbose=Verbose)
+    disp.time <- system.time({
+      disp.output <- est_disp_ml(RespLog=Jloglike, long.data, Jdisp, Jfixed, Jraneff,
+                                    fixedest, dispest0, invSIGMA0, Lval0,
+                                    Bi, B,
+                                    lower=lower.disp, upper=upper.disp,
+                                    independent=independent.raneff,block=SIGMA.block, Verbose=Verbose)
+    })
     
     dispest <- disp.output$disp
     invSIGMA <- disp.output$invSIGMA
@@ -93,7 +99,7 @@ Rnlme <- function(nlmeObjects, long.data, idVar,
     Lval <- disp.output$Lval
     Lmat <- disp.output$Lmat
     
-    cat("done.\n")
+    cat("done. elapsed=", round(disp.time[["elapsed"]], 2), "s\n")
     
     ####################################################    
     ################## update results ##################
@@ -159,12 +165,14 @@ Rnlme <- function(nlmeObjects, long.data, idVar,
   if(sd.method=="HL") {
     cat("Start estimating SD for fixed parameters ...\n ...\n")
     
-    sd_output <- get_sd(RespLog=Jloglike, long.data,  idVar,
-                             fixedest0, dispest0, invSIGMA0, SIGMA0,
-                             Bi, B,
-                             Jfixed,Jraneff)
+    sd.time <- system.time({
+      sd_output <- get_sd(RespLog=Jloglike, long.data,  idVar,
+                               fixedest0, dispest0, invSIGMA0, SIGMA0,
+                               Bi, B,
+                               Jfixed,Jraneff)
+    })
     fixedSD <- sd_output
-    cat("done.\n")
+    cat("done. elapsed=", round(sd.time[["elapsed"]], 2), "s\n")
   
   } else if(sd.method=="aGH"){
     cat("Start estimating SD for fixed parameters ...\n ...\n")
@@ -197,11 +205,13 @@ Rnlme <- function(nlmeObjects, long.data, idVar,
   
   if(dispersion.SD==TRUE){
     cat("Start estimating SD for dispersion parameters ...\n ...\n")
-    sd_disp <- get_sd_dipsersion(RespLog=Jloglike, long.data, idVar,
-                                 fixedest0, dispest0, invSIGMA0,SIGMA0, Lval0, Lmat,
-                                 Bi, B,
-                                 Jfixed, Jraneff, Jdisp)
-    cat("done.\n")
+    sd.disp.time <- system.time({
+      sd_disp <- get_sd_dipsersion(RespLog=Jloglike, long.data, idVar,
+                                   fixedest0, dispest0, invSIGMA0,SIGMA0, Lval0, Lmat,
+                                   Bi, B,
+                                   Jfixed, Jraneff, Jdisp)
+    })
+    cat("done. elapsed=", round(sd.disp.time[["elapsed"]], 2), "s\n")
   } else sd_disp <- NULL
   #### AIC
   AIC <- 2*length(c(fixedest0, dispest0, Lval0)) -2*loglike_value0

@@ -14,23 +14,30 @@
 # only p1 and p3 contains random effects in NLME
 ########################### load packages
 library(nlme)
-library(tidyverse)
+library(dplyr)
 library(Deriv)
 library(stringr)
 library(LaplacesDemon)
+library(mvtnorm)
 library(purrr)
 library(MASS)
+library(Matrix)
 library(xtable)
+library(R.utils)
 
 rm(list=ls())
-########################## source all functions  
-(file.sources = list.files(path=here::here("src"),pattern="*.R$"))
-(file.sources <- paste0(here::here("src"), "/", file.sources))
-sapply(file.sources,source)
+########################## source all functions
+file.sources <- list.files(path=here::here("src"), pattern="*.R$", full.names=TRUE)
+file.sources <- file.sources[basename(file.sources)!="00_dependencies.R"]
+sapply(file.sources, source)
 ######################### Simulation setting
-set.seed(1)
-rep <- 100
-k.runs <- 100 # number of bootstrap runs
+set.seed(as.integer(Sys.getenv("SIM_SEED", "1")))
+rep <- as.integer(Sys.getenv("SIM_REP", "100"))
+k.runs <- as.integer(Sys.getenv("SIM_K_RUNS", "100")) # number of bootstrap runs
+skip.bootstrap <- tolower(Sys.getenv("SIM_SKIP_BOOTSTRAP", "false")) %in% c("1", "true", "yes", "y")
+max.attempts <- as.integer(Sys.getenv("SIM_MAX_ATTEMPTS", "100"))
+output.dir <- Sys.getenv("SIM_OUTPUT_DIR", here::here())
+dir.create(output.dir, recursive=TRUE, showWarnings=FALSE)
 #p_out <- 0.05
 n <- 100
 ni <- 15
@@ -196,9 +203,14 @@ for(k in 1:rep){
   nlme.fit <- cd4.fit <- TS <- JM <- 0
   class(nlme.fit) <- class(cd4.fit) <- class(TS) <- class(JM)<- "try-error"
   TSconvg <- JMconvg <-  FALSE
+  attempt <- 0
   
   while(class(nlme.fit)[1]=="try-error"|class(cd4.fit)=="try-error" | class(JM)=="try-error" | class(TS)=="try-error"
         | TSconvg==FALSE| JMconvg==FALSE){
+    attempt <- attempt + 1
+    if(attempt > max.attempts){
+      stop("Exceeded SIM_MAX_ATTEMPTS while trying to obtain converged NLME, TS, and JM fits.")
+    }
     
     ##########################  simulate data set
     cat("--Simulating data\n")
@@ -288,10 +300,19 @@ for(k in 1:rep){
     }
   }
   ############### Bootstrapping SE #####################
-  cat("--Runing Bootstrapping SE for Joint model\n\n")
-  JM.SD.BT <- get_sd_bootstrap2(Rnlme.fit=JM, simdat, at.rep=k ,k.runs=k.runs, 
-                                independent.raneff = "byModel", df=df_invChi)
-  cat("--done\n")
+  if(skip.bootstrap){
+    cat("--Skipping Bootstrapping SE for Joint model\n\n")
+    JM.SD.BT <- list(se.bt=rep(NA_real_, length(true.fixed)),
+                     se.bt1=rep(NA_real_, length(true.fixed)),
+                     se.bt2=rep(NA_real_, length(true.fixed)),
+                     runs.bt1=NA_integer_,
+                     runs.bt2=NA_integer_)
+  } else {
+    cat("--Runing Bootstrapping SE for Joint model\n\n")
+    JM.SD.BT <- get_sd_bootstrap2(Rnlme.fit=JM, simdat, at.rep=k ,k.runs=k.runs, 
+                                  independent.raneff = "byModel", df=df_invChi)
+    cat("--done\n")
+  }
   
   runs.bt1 <- c(runs.bt1, JM.SD.BT$runs.bt1)
   runs.bt2 <- c(runs.bt2, JM.SD.BT$runs.bt2)
@@ -324,18 +345,18 @@ TS.out <- list(True=true.fixed,Est=est.TS, SD=sd.TS)
 JM.out <- list(True=true.fixed,Est=est.JM, SD=sd.JM,
                SD.BT=sd.bt.JM, SD.BT1=sd.bt1.JM, SD.BT2=sd.bt2.JM)
 
-big <- 15
+big <- as.numeric(Sys.getenv("SIM_RBIAS_REMOVE_CUTOFF", "15"))
 rm.big <- function(out, big){
   out.bias <- t(apply(out$Est, 1, FUN=function(t){abs(t-out$True)/abs(out$True)*100}))
   out.rm <-  apply(out.bias,1,max)>big
   cat("\n",  deparse(substitute(out)) ,"output remove", sum(out.rm), "row with rBias >",big ,"%\n")
   out1 <- out
-  out1$Est <- out$Est[!out.rm,]
-  out1$SD <- out$SD[!out.rm,]
+  out1$Est <- out$Est[!out.rm,,drop=FALSE]
+  out1$SD <- out$SD[!out.rm,,drop=FALSE]
   if(!is.null(out$SD.BT)){
-    out1$SD.BT <- out$SD.BT[!out.rm,]
-    out1$SD.BT1 <- out$SD.BT1[!out.rm,]
-    out1$SD.BT2 <- out$SD.BT2[!out.rm,]
+    out1$SD.BT <- out$SD.BT[!out.rm,,drop=FALSE]
+    out1$SD.BT1 <- out$SD.BT1[!out.rm,,drop=FALSE]
+    out1$SD.BT2 <- out$SD.BT2[!out.rm,,drop=FALSE]
   }
   
   return(list(out_df=out1, out.rm=out.rm))
@@ -429,9 +450,9 @@ cat("\n xtable for output with large rBias removed \n ")
 xtable(cbind(rbind(nl1,0,0,0,0,0),ts1, jm1), type = "latex",digits = 3)
 
 saveRDS(list(NLME.out=NLME.out,TS.out=TS.out,JM.out=JM.out, alpha.NLME=alpha.NLME), 
-        here::here("s2.rds"))
+        file.path(output.dir, "s2_df3.rds"))
 
-save.image(here::here("s2.RData"))
+save.image(file.path(output.dir, "s2_df3.RData"))
 
 
 

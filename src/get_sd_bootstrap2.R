@@ -100,6 +100,7 @@ get_sd_bootstrap2<- function(Rnlme.fit, simdat,at.rep ,k.runs=50, big1=0.1, big2
   ## bootstrap
   est <- disp.est <-  c()
   List.Rnlme <- NULL
+  max.attempts <- as.integer(Sys.getenv("SIM_BOOTSTRAP_MAX_ATTEMPTS", "100"))
   
   for(k in 1:k.runs){
     
@@ -108,9 +109,14 @@ get_sd_bootstrap2<- function(Rnlme.fit, simdat,at.rep ,k.runs=50, big1=0.1, big2
     model.fit  <-  0
     class(model.fit) <- "try-error"
     convg <- FALSE
+    attempt <- 0
     
     
     while(convg==FALSE | class(model.fit)=="try-error"){
+      attempt <- attempt + 1
+      if(attempt > max.attempts){
+        stop("Exceeded SIM_BOOTSTRAP_MAX_ATTEMPTS while trying to obtain a converged bootstrap fit.")
+      }
       
       ## generate random effects
       a0 <- log(df/rchisq(n, df))
@@ -153,8 +159,11 @@ get_sd_bootstrap2<- function(Rnlme.fit, simdat,at.rep ,k.runs=50, big1=0.1, big2
       
       simdat.bt <- simdat.bt %>% arrange(patid, day)
       
-      model.fit <- try(Rnlme(nlmeObject=nlmeObjects.bt, long.data=simdat.bt, idVar="patid", 
-                             independent.raneff = independent.raneff ))
+      fit.time <- system.time({
+        model.fit <- try(Rnlme(nlmeObject=nlmeObjects.bt, long.data=simdat.bt, idVar="patid", 
+                               independent.raneff = independent.raneff ))
+      })
+      cat("BT Rnlme elapsed=", round(fit.time[["elapsed"]], 2), "s\n")
       if(class(model.fit)!="try-error") convg <- model.fit$convergence
     }
     

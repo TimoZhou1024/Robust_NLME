@@ -2,3 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+simulation_output/
+simulation_output_parallel/
+src/nf1.R
+src/nf2.R

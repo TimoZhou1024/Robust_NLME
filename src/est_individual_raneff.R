@@ -37,10 +37,10 @@ est_individual_raneff <- function(RespLog, data, raneff,
   
   k <-  length(raneff)
   
-  gr.mu <- Deriv(RespLog$mu.loglike, raneff)
-  if(Ysigma) gr.sigma <- Deriv(RespLog$sigma.loglike, raneff)
-  if(Yrandisp) {gr.randisp <- Deriv(RespLog$randisp.loglike, raneff)}
-  gr.ran <- Deriv(RespLog$ran.loglike, raneff)
+  gr.mu <- get_Deriv_cached(RespLog$mu.loglike, raneff)
+  if(Ysigma) gr.sigma <- get_Deriv_cached(RespLog$sigma.loglike, raneff)
+  if(Yrandisp) {gr.randisp <- get_Deriv_cached(RespLog$randisp.loglike, raneff)}
+  gr.ran <- get_Deriv_cached(RespLog$ran.loglike, raneff)
   
   gr <- function(xx){
     fy <- numeric(k)
